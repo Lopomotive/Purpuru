@@ -7,20 +7,22 @@
 #include <unordered_map>
 #include <memory>
 
-constexpr char* env_file = "../.env";
+const char* env_file = "../.env";
 
 bool is_valid_env(const char* env_file){
   FILE *fd = fopen(env_file, "r");
-  if(!fd){
+  if(!fd ){
     std::cerr << "File path not valid: " << env_file;
     return false;
   }
-  else return true;
+  else{
+    return true;
+  }
 }
 
-std::string get_env_value(const char* env_file, std::string value){
-  if(is_valid_env(env_file)){
-    const char* env_file_full_path = std::getenv(env_file);
+std::string get_env_value( std::string value){
+  if(!is_valid_env(env_file)){
+    return "";
   }
   struct ValueRegex{
     std::regex clientid{"CLIENT_ID=([^\\s]+)"};
@@ -37,7 +39,7 @@ std::string get_env_value(const char* env_file, std::string value){
       {"CLIENT_SECRET_ID", "Placeholder"},
       {"TOKEN", "Placeholder"},
   };
-  std::string line = nullptr;
+  std::string line;
   //Improve this, not following DRY
   while(std::getline(file, line)){
     if(std::regex_match(line, match, valueregex.clientid)){
