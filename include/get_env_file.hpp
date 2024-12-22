@@ -20,7 +20,7 @@ bool is_valid_env(const char* env_file){
   }
 }
 
-std::string get_env_value( std::string value){
+std::string get_env_value(){
   if(!is_valid_env(env_file)){
     return "";
   }

@@ -1,3 +1,4 @@
+#include <dpp/dispatcher.h>
 #include <dpp/dpp.h>
 #include <optional>
 #include "get_env_file.hpp"
@@ -41,17 +42,12 @@ namespace user{
   std::string *user_token = nullptr;
 }
 
-class BotCreate{
-private:
-  std::string client_id;
-  std::string client_secret_id;
-  std::string token;
-protected:
-  dpp::cluster bot;
-public:
-  explicit BotCreate() :
-   client_id(get_env_value("CLIENT_ID")),
-   client_secret_id(get_env_value("CLIENT_SECRET_ID")),
-   token(get_env_value("TOKEN")), bot(token){
-   }
+//std::string token = get_env_value();
+template <typename T>
+T CreateBot(){
+  const std::string token = get_env_value();
+  dpp::cluster bot(token);
+  bot.on_log(dpp::utility::cout_logger());
+  std::cout << "Bot running" << std::endl;
+  return bot;
 }

@@ -1,0 +1,12 @@
+[General]
+
+
+[Logging]
+Log-path = default
+Username = True
+User-ID = True
+User-Profile = True
+Message = True
+Message-Timestamp = True
+
+
