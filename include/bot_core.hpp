@@ -64,14 +64,35 @@ using regex_matchable_type_t = typename regex_matchable_type<T>::type;
 
 #endif
 
-//Check buffer overflow possibility
 #ifdef BUFFER_OVERFLOW_CHECK
 
-constexpr bool buffer_overflowed(const char(&buffer)[N]){
-  uint16_t buffer_overflow_size* = sizeof(N)*1.5;
-  try{
-    
-  }
+//This may work but needs to be checked in the future
+template<size_t N>
+struct compile_time_index {};
+
+template<size_t N>
+constexpr compile_time_index<N> index{};
+
+template<typename T, size_t Size>
+constexpr bool check_bounds(compile_time_index<0>) {
+    return true;
+}
+
+//Make this function better
+template <typename T, std::size_t Size>
+constexpr std::vector<T> convert_to_safe(const std::array<T, Size>& unsafe_buffer){
+  static_assert(N > 0, std::runtime_error);
+  static_assert(std::is_trivially_copyable_v<T>, std::runtime_error);
+  std::vector<T> safeVector(unsafe_buffer.begin(), unsafe_buffer.end());
+  return safeVector;;
+}
+template<typename T, std::size_t Size, typename... Is>
+constexpr bool check_bounds(compile_time_index<Size>, compile_time_index<Is...>, bool recreate_buffer) {
+    static_assert(Size < sizeof(T), "Index out of bounds");
+    if(!recreate_buffer) return check_bounds(compile_time_index<Size + 1>, compile_time_index<Is...>{});
+    else{
+      
+    }
 }
 
 #endif
