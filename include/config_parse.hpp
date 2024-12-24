@@ -10,64 +10,80 @@
 #include "bot_core.hpp" 
 #define REGEX_TYPE
 
-using decl_values = std::variant<int, std::string, double, bool, const char*>;
+/*
+*
+*/
 
-struct Logging{
-  bool username;
-  bool user_id;
-  bool user_profile;
-  bool message;
-  bool timestamp;
+enum filetype {
+  logging,
+  type_unknown
 };
 
-//Better use to filter through things, will probably be moved to core
+enum perms{
+  no_perms = 0,
+  owner_read = 0400,
+  owner_write = 0200,
+  owner_exe = 0100,
+  owner_all = 0700,
+
+  group_read = 040,
+  group_write = 020,
+  group_exe = 010,
+  group_all = 070,
+
+  others_read = 04,
+  others_write = 02,
+  others_exe = 01,
+  others_all = 07,
+
+  all_all =  0777
+};
+
+typedef std::filesystem::path path_t;
 template <typename T>
-bool is_matching(std::regex* regex, regex_matchable_type_t<T> regex_string){  
-  std::smatch match;
-  if(std::regex_match(regex_string, *regex, match)){
-    return true;
-  }
-  else{
-    throw std::runtime_error("Regex invalid");
-    return false;
-  }
-}
+constexpr bool is_string = std::is_same_v<T, std::string>;
 
-//Continue with function
-const std::string getconfig_file(){
-  //Might use regex here
-  const std::filesystem::path directory_path = "../";
-  for(const auto& entry :std::filesystem::directory_iterator(directory_path)){
-    if(entry.is_regular_file() && entry.path().extension() == ".config"){
-      std::string entry_ = entry.path().string();
-      return static_cast<std::string>(entry_);
+template <typename T>
+struct path_converter{
+  
+};
+
+template<>
+struct path_converter<std::string_view> {
+    static constexpr bool is_convertible = true;
+    static std::filesystem::path convert(std::string_view sv) {
+        return std::filesystem::path(sv);
     }
-    else{
-      uint8_t retry_counter = 4;
-      while(retry_counter){
-        std::regex config_pattern(R"(.*\.config$)");
-        std::smatch match;
-        char config_folder[256];
-        printf("%c %s Could not find file, input file:"); //Printf works
-        scanf("%s",config_folder);
-        std::string config_folder_str(config_folder);
-        if(config_folder.is_regular_file(), && config_folder.path().extension() == ".config"){
-          printf("%s Valid config file");
-          return static_cast<std::string>(config_folder);
-        }
-      }
+};
+
+template<>
+struct path_converter<std::string>{
+  static constexpr bool is_convertible = true;
+  static std::filesystem::path convert(std::string sv){
+    return std::filesystem::path(sv);
   }
+};
+
+template <typename T>
+auto safe_path_convert(const T& value) -> 
+    typename std::enable_if<path_converter<T>::is_convertible, std::filesystem::path>::type {
+    return path_converter<T>::convert(value);
 }
 
-bool is_valid_config_file(const char* filename){
-  FILE * file  = fopen(filename, "r");
-  if(!file){
-    throw std::runtime_error("Invalid config file");
-  }
-}
+template <typename T> 
+using string_or_char_t =
+ typename std::enable_if<std::is_same_v<std::decay_t<T>, const char> ||
+                        std::is_same_v<std::decay_t<T>, std::string>, T
+ >;
 
-//Parse into config file using libconfig
-void ConfigFileRead(){
-  libconfig::Config cfg;
-  cfg.
+template <typename T>
+std::string_view* get_folder(string_or_char_t<T> folder_path){
+  using type = T;
+  auto valid_path = path_converter<decltype(folder_path)>::type;
+  FILE * file_it = fopen()
 }
+  
+
+typedef struct Logging{
+  
+Logging;
