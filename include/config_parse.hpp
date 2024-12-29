@@ -12,11 +12,17 @@
 #include <filesystem>
 #include <unordered_map>
 
+template <typename T>
+constexpr bool defined(T& t){
+  #ifdef t
+  return true;
+}
+
 #if defined(LIBCONFIG)
 #include <liboconfig.h++>
 #endif
 
-/*
+/**
 * @brief config parsing only currently supports linux filesystem
 */
 #define LINUX
@@ -24,10 +30,17 @@
 #include <sys/stat.h>
 #endif
 
-template <typename T>
+if defined(PERMISSION_ERRORS)
+//Work on tommorow to get custom permission errors that are more specific
+struct permission_errors{
+  
+};
+#endif
+
+template <typename T> //Delete?(DELETE)
 class ParseConfig;
 class Folder;
-/*
+/**
 * @brief 
 */
 //Continue this
@@ -40,10 +53,10 @@ public:
     logging, 
     type_unknown
   };
-  virtual ~FileTypes() = default;
-  virtual ~FileTypes() noexcept = 0;
+  ~FileTypes() noexcept = default;
+  ~FileTypes() noexcept = 0;
   static filetype detect_filetype(const std::string_view, filetype) = 0;
-  static const inline std::unorered_map<std::string_view, filetype> extension_map = {
+  static const inline std::unordered_map<std::string_view, filetype> extension_map = {
   {".conf", config},
   {".data", data},
   {".cache", cache},
@@ -51,7 +64,6 @@ public:
   };
 };
 
-//using perm_t 
 constexpr std::unordered_map<uint8_t, uint8_t> perm_to_flag = {
     {S_IRUSR, O_RDONLY},         // Owner read
     {S_IWUSR, O_WRONLY},         // Owner write
@@ -67,7 +79,34 @@ constexpr std::unordered_map<uint8_t, uint8_t> perm_to_flag = {
     {S_IRWXO, O_RDWR},           // Others all
     {S_IRWXU | S_IRWXG | S_IRWXO, O_RDWR} // All permissions
 };
+/*
+* @brief perm_t variable only being able to store valid permissions inside perm_to_flag
+*/
+//Note: Improve perm_t class tommorow, only skeleton for now(DELETE)
+//Maybe use for const loop instead for better parsing?(DELETE)
+class perm_t{
+private:
+  uint8_t value;
+  
+  explicit perm_t(uint8_t perm) : value(perm){
+    if(perm_to_flag.find(perm) == perm_to_flag.end(perm)){
+      throw(std::invalid_argument("Invalid permission value"));
+    }
+  }
+  
+  operator uint8_t() const {return value;}
+  perm_t& operator=(uint8_t perm){
+    if(perm_to_flag.find(perm) == perm_to_flag.end(perm)){
+      throw(std::invalid_arument("Invalid ")) 
+    }
+  }
+  value = perm;
+  return *this;
 
+  bool operator==(const perm_t& other) const {
+      return value == other.value;
+  }
+}
 
 typedef std::filesystem::path path_t;
 
@@ -100,14 +139,20 @@ auto safe_path_convert(const T& value) ->
     return path_converter<T>::convert(value);
 }
 
+/**
+* @brief string_or_char_t variable to accept both types
+* @note both string_or_char_t types are not needed, type overloading?(DELETE)
+*/
 template <typename T>
 using string_or_char_t =
  typename std::enable_if<std::is_same_v<std::decay_t<T>, const char*> ||
-                        std::is_same_v<std::decay_t<T>, std::string>, T
+                         std::is_same_v<std::decay_t<T>, std::string_view ||
+                        std::is_same_v<std::decay_t<T>,T>::type;
  >;
+ using string_or_char_t = std::variant<std::string, std::string_view, const char*>;
 
-/*
-* check if variable have been initilzied or not
+/**
+* @breif check if variable have been initilzied or not
 * works by: is_initalized_v
 */
 template<typename T>
@@ -124,36 +169,80 @@ class is_same_eval{
 
 };
 
+/**
+* @brief function to check if path/dir is valid with is_valid_path
+* @param string_or_char_t variable can be both string or char
+*/
+
+//Might be able to shorten this down or add something(DELETE)
+bool check_valid_path_fs(string_or_char_t path_){
+  auto path = safe_convert_to_path(path_);
+  if(!std::filesystem::exists(path) || !std::filesystem::is_directory(path)){
+    throw(std::runtime_error("Invalid folder path:" + path.string()));
+  }
+  return true;
+}
+
+//Might be able to shorten this down or add something(DELETE)
+bool check_valid_path_sys(string_or_char_t path){
+  struct stat sb;
+  if(!path.c_str(), &sb == 0 && !S_ISDIR(sb.st_mode)){
+    throw(std::runtime_error("Invalid folder path:" + path.string()));
+  }
+  return true;
+}
+
+template <typename T>
+constexpr bool is_valid_path(string_or_char_t<T> path) {
+    return check_valid_path_fs(path) && check_valid_path_sys(path);
+}
+
 /*
 * @brief folder class handling folder data type 
 * @type file_t type 
 */
-
-typename file_t = 
-class Folder{
+class FilesMetaData{
 private:
-  struct folder_metadata const{ 
-    std::string_view name;
-    uint8_t perm;
-    FileTypes::filetype type; 
-  };
-  /*
-  * @brief template for checking that file has appropirate metadata
+  /**
+  * @brief struct for handling metadata
+  * @param folder for storing all files metadata
   */
-  #if define(CPP_VERSION_20 || CPP_VERSION_23_OR_LATER)
-  
-  #endif
-  
-  friend std::string_view folder;
-  friend std::string_view file; 
-  friend perm_t perm;
+  struct meta_data{
+    std::string_view file_name;
+    uint8_t perm;
+  };
+  string_or_char_t dir_path;
+  std::shared_ptr<std::vector<meta_data>> folder = std::make_shared<std::vector<meta_data>>();
 public:
-  //Perm may need to be worked on here(DELETE)
-  explicit Folder(std::string_view folder_) : folder(_folder), perm(){};
-  Folder() = default;
-  [[nosdiscard]] const std::string_view& getFolder() const {return folder};
-  [[nodiscard]] const perm_t getFolderPermission() const {return perm};
-  const folder_metadata assignfolder()
+  [[nodiscard]] const std::shared_ptr<std::vector<meta_data>>& getFolder() const {return folder;}
+  [[nodiscard]] const perm_t getFolderPermission() const {return perm;}
+  [[nodiscard]] const perm_t getFilepermission() const {return perm;}
+  explicit FolderMetaData(string_or_char_t dir_path_) : dir_path(dir_path_){
+    if(!is_valid_path(dir_path)){
+      exit(EXIT_FAILURE); //Might change this later
+    }
+  }
+  FolderMetaData() noexcept{
+    std::runtime_error("Cannot construct without path argument");
+  }
+  ~FolderMetaData() noexcept = default;
+protected:
+  folder_meta_data& operator()(const meta_data& new_data){
+    folder->push_back(new_data);
+    return *this;
+  }
+};
+
+
+perm_t check_permission()
+
+class File : public FolderMetaData{
+public:
+  explicit File(const string_or_char_t& filePath)
+    : FileMetaData(filePath){}
+  [[nodiscard]] uint8_t getFilePermission(const std::string_view& fileName) const {
+    
+  }
 }
 
 template <> 
