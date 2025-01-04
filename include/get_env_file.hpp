@@ -1,56 +1,57 @@
-#include <cstdlib> 
+#define GET_ENV_FILE //(DELETE)
+#ifdef GET_ENV_FILE
+
 #include <string>
-#include <stdio.h>
-#include <fstream> 
-#include <iostream>
+#include <fstream>
 #include <regex>
 #include <unordered_map>
 #include <memory>
 
-const char* env_file = "../.env";
+#define FILE_CORE
+#include "file_core.hpp"
 
-bool is_valid_env(const char* env_file){
-  FILE *fd = fopen(env_file, "r");
-  if(!fd ){
-    std::cerr << "File path not valid: " << env_file;
-    return false;
-  }
-  else{
-    return true;
-  }
-}
+/**
+* @brief macro env error handling
+*/
 
-std::string get_env_value(){
-  if(!is_valid_env(env_file)){
-    return "";
-  }
-  struct ValueRegex{
-    std::regex clientid{"CLIENT_ID=([^\\s]+)"};
-    std::regex client_secret_id{"CLIENT_SECRET=([^\\s]+)"};
-    std::regex token{"TOKEN=([^\\s]+)"};
-  };
+//Maybe need to split it into more functions
 
-  ValueRegex valueregex;
-  
+class ReadEnv{
+private:
+  std::regex clientid{"CLIENT_ID=([^\\s]+)"};
+  std::regex client_secret_id{"CLIENT_SECRET=([^\\s]+)"};
+  std::regex token_reg{"TOKEN=([^\\s]+)"};
   std::smatch match;
-  std::ifstream file(env_file);
-  std::unordered_map<std::string, std::string> env_values = {
-      {"CLIENT_ID", "Placeholder"},
-      {"CLIENT_SECRET_ID", "Placeholder"},
-      {"TOKEN", "Placeholder"},
+  file_t file;
+  std::string client_id;
+  std::string client_secret;
+  std::string token;
+public:
+  std::vector<std::pair<std::regex, std::string*>> keys = {
+    {clientid, &client_id},
+    {client_secret_id, &client_secret},
+    {token_reg, &token}
   };
-  std::string line;
-  //Improve this, not following DRY
-  while(std::getline(file, line)){
-    if(std::regex_match(line, match, valueregex.clientid)){
-      env_values["CLIENT_ID"] = match[1];
-    }
-    else if(std::regex_match(line, match, valueregex.client_secret_id)){
-      env_values["CLIENT_SECRET_ID"] = match[1];
-    }
-    else if(std::regex_match(line, match, valueregex.token)){
-      env_values["TOKEN"] = match[1];
+  ReadEnv(file_t file_)noexcept : file(file_){} 
+  /**
+  * @brief gets env values from env file and emplaces them in env_values map
+  */
+  void get_env_values(){
+    std::ifstream env_file(file.path);
+    std::string line;
+    while(std::getline(env_file, line)){
+      for(const auto& [regex, value] : keys){
+        if(std::regex_search(line, match, regex) && match.size() > 1){
+          *value = match[1].str();
+        }
+      }
     }
   }
-  return env_values[value];
-}
+  [[nodiscard]] std::string get_client_id() const{return client_id;}
+  [[nodiscard]] std::string get_client_secret() const{return client_secret;}
+  [[nodiscard]]std::string get_token()const{return token;}
+  
+ ~ReadEnv() = default;
+};
+
+#endif
