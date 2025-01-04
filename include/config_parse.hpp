@@ -1,254 +1,204 @@
-/*
-* @brief Rewritten version of config_parse (DELETE)
-* @self First read cppfs and take inspiration
-*/
-#ifdef CONFIG_PARSE_HPP
+#ifndef CONFIG_PARSE_HPP
 #define CONFIG_PARSE_HPP
 
-#include <regex>
-#include <variant>
-#include <stdexcept>
-#include <variant>
-#include <filesystem>
+#include <any>
 #include <unordered_map>
+#include <string>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <variant>
+#include <optional>
+#include <memory>
+#include <vector> // Add this include for std::vector
 
+/**
+ * @brief Alias for handling string-like types.
+ */
+using string_or_char_t = std::variant<std::string, std::string_view, const char*>;
+
+/**
+ * @brief Result class for catching and processing results
+ */
 template <typename T>
-constexpr bool defined(T& t){
-  #ifdef t
-  return true;
-}
-
-#if defined(LIBCONFIG)
-#include <liboconfig.h++>
-#endif
-
-/**
-* @brief config parsing only currently supports linux filesystem
-*/
-#define LINUX
-#if defined(LINUX)
-#include <sys/stat.h>
-#endif
-
-if defined(PERMISSION_ERRORS)
-//Work on tommorow to get custom permission errors that are more specific
-struct permission_errors{
-  
+class Result {
+    // Placeholder implementation for Result
 };
-#endif
 
-template <typename T> //Delete?(DELETE)
-class ParseConfig;
-class Folder;
 /**
-* @brief 
-*/
-//Continue this
-class FileTypes{
+ * @brief Base class for configuration components
+ */
+class ConfigBase {
 public:
-  virtual enum filetype{
-    config,
-    data,
-    cache,
-    logging, 
-    type_unknown
-  };
-  ~FileTypes() noexcept = default;
-  ~FileTypes() noexcept = 0;
-  static filetype detect_filetype(const std::string_view, filetype) = 0;
-  static const inline std::unordered_map<std::string_view, filetype> extension_map = {
-  {".conf", config},
-  {".data", data},
-  {".cache", cache},
-  {".log", logging}
-  };
-};
-
-constexpr std::unordered_map<uint8_t, uint8_t> perm_to_flag = {
-    {S_IRUSR, O_RDONLY},         // Owner read
-    {S_IWUSR, O_WRONLY},         // Owner write
-    {S_IXUSR, O_RDWR},           // Owner exec
-    {S_IRWXU, O_RDWR},           // Owner all
-    {S_IRGRP, O_RDONLY},         // Group read
-    {S_IWGRP, O_WRONLY},         // Group write
-    {S_IXGRP, O_RDWR},           // Group exec
-    {S_IRWXG, O_RDWR},           // Group all
-    {S_IROTH, O_RDONLY},         // Others read
-    {S_IWOTH, O_WRONLY},         // Others write
-    {S_IXOTH, O_RDWR},           // Others exec
-    {S_IRWXO, O_RDWR},           // Others all
-    {S_IRWXU | S_IRWXG | S_IRWXO, O_RDWR} // All permissions
-};
-/*
-* @brief perm_t variable only being able to store valid permissions inside perm_to_flag
-*/
-//Note: Improve perm_t class tommorow, only skeleton for now(DELETE)
-//Maybe use for const loop instead for better parsing?(DELETE)
-class perm_t{
-private:
-  uint8_t value;
-  
-  explicit perm_t(uint8_t perm) : value(perm){
-    if(perm_to_flag.find(perm) == perm_to_flag.end(perm)){
-      throw(std::invalid_argument("Invalid permission value"));
-    }
-  }
-  
-  operator uint8_t() const {return value;}
-  perm_t& operator=(uint8_t perm){
-    if(perm_to_flag.find(perm) == perm_to_flag.end(perm)){
-      throw(std::invalid_arument("Invalid ")) 
-    }
-  }
-  value = perm;
-  return *this;
-
-  bool operator==(const perm_t& other) const {
-      return value == other.value;
-  }
-}
-
-typedef std::filesystem::path path_t;
-
-template <typename T>
-constexpr bool is_string = std::is_same_v<T, std::string>;
-
-template <typename T>
-struct path_converter{
-};
-
-template<>
-struct path_converter<std::string_view> {
-    static constexpr bool is_convertible = true;
-    static std::filesystem::path convert(std::string_view sv) {
-        return std::filesystem::path(sv);
-    }
-};
-
-template<>
-struct path_converter<std::string>{
-  static constexpr bool is_convertible = true;
-  static std::filesystem::path convert(const std::string& sv){
-    return std::filesystem::path(sv);
-  }
-};
-
-template <typename T>
-auto safe_path_convert(const T& value) ->
-    typename std::enable_if<path_converter<T>::is_convertible, std::filesystem::path>::type {
-    return path_converter<T>::convert(value);
-}
-
-/**
-* @brief string_or_char_t variable to accept both types
-* @note both string_or_char_t types are not needed, type overloading?(DELETE)
-*/
-template <typename T>
-using string_or_char_t =
- typename std::enable_if<std::is_same_v<std::decay_t<T>, const char*> ||
-                         std::is_same_v<std::decay_t<T>, std::string_view ||
-                        std::is_same_v<std::decay_t<T>,T>::type;
- >;
- using string_or_char_t = std::variant<std::string, std::string_view, const char*>;
-
-/**
-* @breif check if variable have been initilzied or not
-* works by: is_initalized_v
-*/
-template<typename T>
-struct is_initialized {
-    template<typename U = T>
-    static constexpr bool value = std::is_base_of<std::monostate, U>::value && std::is_lvalue_reference<U>::value;
-};
-
-template<typename T>
-inline constexpr bool is_init_v = is_initialized<T>::value;
-
-template <typename T, typename D>
-class is_same_eval{
-
+    virtual void load_from_config(const std::unordered_map<std::string, std::string>& settings) = 0;
+    virtual ~ConfigBase() = default;
 };
 
 /**
-* @brief function to check if path/dir is valid with is_valid_path
-* @param string_or_char_t variable can be both string or char
-*/
-
-//Might be able to shorten this down or add something(DELETE)
-bool check_valid_path_fs(string_or_char_t path_){
-  auto path = safe_convert_to_path(path_);
-  if(!std::filesystem::exists(path) || !std::filesystem::is_directory(path)){
-    throw(std::runtime_error("Invalid folder path:" + path.string()));
-  }
-  return true;
-}
-
-//Might be able to shorten this down or add something(DELETE)
-bool check_valid_path_sys(string_or_char_t path){
-  struct stat sb;
-  if(!path.c_str(), &sb == 0 && !S_ISDIR(sb.st_mode)){
-    throw(std::runtime_error("Invalid folder path:" + path.string()));
-  }
-  return true;
-}
-
-template <typename T>
-constexpr bool is_valid_path(string_or_char_t<T> path) {
-    return check_valid_path_fs(path) && check_valid_path_sys(path);
-}
-
-/*
-* @brief folder class handling folder data type 
-* @type file_t type 
-*/
-class FilesMetaData{
-private:
-  /**
-  * @brief struct for handling metadata
-  * @param folder for storing all files metadata
-  */
-  struct meta_data{
-    std::string_view file_name;
-    uint8_t perm;
-  };
-  string_or_char_t dir_path;
-  std::shared_ptr<std::vector<meta_data>> folder = std::make_shared<std::vector<meta_data>>();
+ * @brief Class for variable config_t type
+ */
+class config_t {
 public:
-  [[nodiscard]] const std::shared_ptr<std::vector<meta_data>>& getFolder() const {return folder;}
-  [[nodiscard]] const perm_t getFolderPermission() const {return perm;}
-  [[nodiscard]] const perm_t getFilepermission() const {return perm;}
-  explicit FolderMetaData(string_or_char_t dir_path_) : dir_path(dir_path_){
-    if(!is_valid_path(dir_path)){
-      exit(EXIT_FAILURE); //Might change this later
+    std::any value;
+
+    config_t() = default;
+
+    template <typename T>
+    config_t(T val) : value(val) {}
+
+    /**
+     * @brief Operator to assign value to config_t
+     */
+    template <typename T>
+    config_t& operator=(T val) {
+        value = val;
+        return *this;
     }
-  }
-  FolderMetaData() noexcept{
-    std::runtime_error("Cannot construct without path argument");
-  }
-  ~FolderMetaData() noexcept = default;
-protected:
-  folder_meta_data& operator()(const meta_data& new_data){
-    folder->push_back(new_data);
-    return *this;
-  }
+
+    /**
+     * @brief Helper to update the value from a string
+     * @note will be worked on further
+     */
+    void update_from_string(const std::string& str) {
+        try {
+            if constexpr (std::is_same_v<std::string, std::decay_t<decltype(value)>>) {
+                value = str;
+            } else if constexpr (std::is_same_v<int, std::decay_t<decltype(value)>>) {
+                value = std::stoi(str);
+            } else if constexpr (std::is_same_v<bool, std::decay_t<decltype(value)>>) {
+                value = (str == "true" || str == "1");
+            } else if constexpr (std::is_same_v<double, std::decay_t<decltype(value)>>) {
+                value = std::stod(str);
+            }
+        } catch (...) {
+            std::cerr << "Error parsing value: " << str << std::endl;
+        }
+    }
+
+    /**
+     * @brief Extract value of a specific type
+     */
+    template <typename T>
+    T get_value() const {
+        if (auto val = std::any_cast<T>(&value)) {
+            return *val;
+        }
+        throw std::bad_any_cast();
+    }
 };
 
-
-perm_t check_permission()
-
-class File : public FolderMetaData{
-public:
-  explicit File(const string_or_char_t& filePath)
-    : FileMetaData(filePath){}
-  [[nodiscard]] uint8_t getFilePermission(const std::string_view& fileName) const {
-    
-  }
-}
-
-template <> 
-class ParseConfig{
+/**
+ * @brief Logging configuration class
+ */
+class Logging : public ConfigBase {
 private:
-  
+    config_t log_path = std::string("default");
+    config_t username = true;
+    config_t user_id = true;
+    config_t user_profile = true;
+    config_t message = true;
+    config_t message_timestamp = true;
+
+    std::unordered_map<std::string, config_t*> settings = {
+        {"log-path", &log_path},
+        {"username", &username},
+        {"user-id", &user_id},
+        {"user-profile", &user_profile},
+        {"message", &message},
+        {"message-timestamp", &message_timestamp}
+    };
+
+public:
+    config_t get_setting(const std::string& key) const {
+        for (const auto& [setting_key, setting_value] : settings) {
+            if (setting_key == key) {
+                return *setting_value;
+            }
+        }
+        return config_t();
+    }
+
+    void load_from_config(const std::unordered_map<std::string, std::string>& section) override {
+        for (auto& [key, value_ptr] : settings) {
+            if (section.find(key) != section.end()) {
+                value_ptr->update_from_string(section.at(key));
+            }
+        }
+    }
+};
+
+/**
+ * @brief Class to load configurations
+ */
+class LoadConfig {
+private:
+    std::unordered_map<std::string, std::unordered_map<std::string, std::string>> config_data;
+    std::vector<std::shared_ptr<ConfigBase>> config_classes; // Correct declaration
+    string_or_char_t file;
+
+public:
+    explicit LoadConfig(string_or_char_t file_) : file(std::move(file_)) {
+        config_classes.emplace_back(std::make_shared<Logging>());
+    }
+
+    void load_from_file() {
+        std::ifstream config_file(std::visit([](auto&& arg) -> const char* {
+            if constexpr (std::is_same_v<std::decay_t<decltype(arg)>, const char*>) return arg;
+            else if constexpr (std::is_same_v<std::decay_t<decltype(arg)>, std::string>) return arg.c_str();
+            else if constexpr (std::is_same_v<std::decay_t<decltype(arg)>, std::string_view>) return arg.data();
+        }, file));
+
+        if (!config_file.is_open()) {
+            std::cerr << "Error opening configuration file." << std::endl;
+            return;
+        }
+
+        std::string line;
+        std::string current_section;
+        while (std::getline(config_file, line)) {
+            if (line.empty() || line[0] == '#') continue;
+
+            if (line[0] == '[') {
+                current_section = line.substr(1, line.find(']') - 1);
+                continue;
+            }
+
+            size_t delimiter_pos = line.find('=');
+            if (delimiter_pos != std::string::npos) {
+                std::string key = line.substr(0, delimiter_pos);
+                std::string value = line.substr(delimiter_pos + 1);
+                config_data[current_section][key] = value;
+            }
+        }
+    }
+
+    void load_from_config() {
+        for (const auto& config_class : config_classes) {
+            for (const auto& [section, settings] : config_data) {
+                config_class->load_from_config(settings);
+            }
+        }
+    }
+};
+
+std::ostream& operator<<(std::ostream& os, const config_t& cfg) {
+    try {
+        if (auto val = std::any_cast<std::string>(&cfg.value)) {
+            os << *val;
+        } else if (auto val = std::any_cast<int>(&cfg.value)) {
+            os << *val;
+        } else if (auto val = std::any_cast<double>(&cfg.value)) {
+            os << *val;
+        } else if (auto val = std::any_cast<bool>(&cfg.value)) {
+            os << (*val ? "True" : "False");
+        } else {
+            os << "Unknown type";
+        }
+    } catch (...) {
+        os << "Error extracting value";
+    }
+    return os;
 }
 
 #endif
+
