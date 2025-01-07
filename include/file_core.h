@@ -29,6 +29,7 @@ class file_t{
 private:
   std::filesystem::path path;
   string_or_char_t file;
+  mutable std::string cached_string;
 public:
   file_t() = default;
 
@@ -62,6 +63,15 @@ public:
   */
   operator std::string() const noexcept {
     return path.string();
+  }
+
+  /**
+  * @brief converts type to string_view 
+  * @note used for tomllib
+  */
+  operator std::string_view() const noexcept {
+    cached_string = path.string();
+    return cached_string;
   }
 };
 
