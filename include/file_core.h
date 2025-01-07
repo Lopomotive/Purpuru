@@ -50,6 +50,19 @@ public:
     }
     throw std::runtime_error("File does not exist");
   }
+
+  /**
+  * @brief converts type to std::filesystem::path
+  */
+  operator std::filesystem::path() const noexcept {
+    return path;
+  }
+  /**
+  * @brief return static cast
+  */
+  operator () const noexcept{
+    
+  }
 };
 
 /**
