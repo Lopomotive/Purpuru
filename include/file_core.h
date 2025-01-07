@@ -58,10 +58,10 @@ public:
     return path;
   }
   /**
-  * @brief return static cast
+  * @brief converts type to string
   */
-  operator () const noexcept{
-    
+  operator std::string() const noexcept {
+    return path.string();
   }
 };
 
