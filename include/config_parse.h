@@ -65,6 +65,8 @@ private:
 
 public:
 
+  /** @note check out these constructors and see which to keep and which to throw away*/
+
   /**
   * @note copy constructor may be better then constructor with parameter
   */ 
@@ -73,8 +75,18 @@ public:
   /**
   * @brief copy constructor
   */
-  ConfigError(const ConfigError&);
-  
+  ConfigError(const ConfigError&) = default;
+
+  /**
+  * @brief move constructor
+  * @note also how does && work here?
+  */
+  ConfigError(ConfigError&&) noexcept = default;
+
+  /**
+  * @brief copy assignment operator
+  */
+  ConfigError& operator=(ConfigError&) noexcept = default;
   
   /**
   * @brief function to determine if error is solveable or not
@@ -137,6 +149,9 @@ public:
 * @brief class for loading and parsing config file
 * @note ConfigLoader should be used for 
 */
+
+/** @note using tomllib C++ to parse .toml config file */
+
 class ConfigLoader{  
 protected:
   /**
