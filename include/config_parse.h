@@ -3,6 +3,11 @@
 
 #pragma once
 
+/**
+* @brief toml config parsing lib
+*/
+#include <toml++/toml.hpp>
+
 #include "file_core.h"
 
 #include <any>
@@ -37,6 +42,15 @@
 */
 
 /**
+* @brief class forward declaration
+*/
+template<typename T, typename E> class ConfigError;
+template<typename T> class ConfigResult;
+class ConfigValue;
+class ConfigLoader;
+class ConfigClass;
+
+/**
 * @brief error handling class 
 * @note all values are parsed by ConfigResult, class should NOT get values on its own
 */
@@ -64,8 +78,6 @@ private:
   [[nodiscard]] void get() const;
 
 public:
-
-  /** @note check out these constructors and see which to keep and which to throw away*/
 
   /**
   * @note copy constructor may be better then constructor with parameter
@@ -102,11 +114,6 @@ public:
 template <typename T> 
 class ConfigResult{
 private:
-
-  /** @note im not sure if a concept is needed */
-  template <typename value>
-  concept decl_val_valid = std::is_destructible<value>::value;
-
   /**
   * @brief value for the value given into the constructor and a type specifier if the user does not know
   */
@@ -124,11 +131,6 @@ public:
   * @brief operator to push bad value to ConfigError
   */
   [[nodiscard]] ConfigError<T>& operator->()const{return error_;}
-
-  /**
-  * @brief variable to extract declaration type from value
-  */
-  using value_type = decltype(value);
 };
 
 /**
@@ -138,11 +140,73 @@ template <class T>
 class ConfigResult;
 
 /**
-* @brief holds possible config values 
-*/
-class ConfigValue{
+ * @brief Class to hold possible configuration values
+ */
+class ConfigValue {
 public:
-  ConfigValue() = default;
+    /**
+     * @brief Type alias for supported configuration value types
+     */
+    using config_types = std::variant<bool, std::string_view, file_t, folder_t,
+                                     const char*, std::string>;
+    using config_map = std::unordered_map<std::string, config_types>;
+    /**
+     * @brief Default constructor
+     */
+    ConfigValue() = default;
+
+    /**
+     * @brief Constructor taking a configuration value
+     */
+    template<typename T>
+    explicit ConfigValue(T&& value);
+    
+    /**
+     * @brief Copy constructor
+     */
+    ConfigValue(const ConfigValue&) = default;
+
+    /**
+     * @brief Move constructor
+     */
+    ConfigValue(ConfigValue&&) noexcept = default;
+
+    /**
+     * @brief Copy assignment operator
+     */
+    ConfigValue& operator=(const ConfigValue&) = default;
+
+    /**
+     * @brief Move assignment operator
+     */
+    ConfigValue& operator=(ConfigValue&&) noexcept = default;
+
+    /**
+     * @brief Assignment operator for config values
+     */
+    ConfigValue& operator=(const config_types& value) {
+        value_ = value;
+        return *this;
+    }
+
+    /**
+     * @brief Get the stored value
+     */
+    [[nodiscard]] const config_types& value() const {
+        return value_;
+    }
+
+    /**
+    * @oops what would this be used for?
+    */
+    template<typename T>
+    [[nodiscard]] bool is() const;
+    
+    template<typename T>
+    [[nodiscard]] const T& as() const;
+
+private:
+    config_types value_;
 };
 
 /**
@@ -152,7 +216,10 @@ public:
 
 /** @note using tomllib C++ to parse .toml config file */
 
-class ConfigLoader{  
+class ConfigLoader{
+private:
+  /** @oops why this? */
+  file_t config_path_t;
 protected:
   /**
   * @brief function to load in configurations
@@ -165,13 +232,86 @@ public:
   */
   explicit ConfigLoader(file_t path);
   ~ConfigLoader() = default;
+
+  /**
+  * @brief prevent copying, allow moving
+  * @oops is this needed?
+  */
+  ConfigLoader(const ConfigLoader&) = delete;
+  ConfigLoader& operator=(const ConfigLoader&) = delete;
+  ConfigLoader(ConfigLoader&&) noexcept = default;
+  ConfigLoader& operator=(ConfigLoader&&) noexcept = default;
+
 };
 
 /**
 * @brief class to store all configurations
 */
 class ConfigClass{
-  class LoggingConfig;
-}
+  virtual ~ConfigClass() = default;
+
+  class LoggingConfig{
+    public:
+      /**
+      * @brief specifies log path
+      */
+      static file_t log_path;
+
+      /**
+      * @brief set if username should be included in log, recommended setting
+      */
+      static bool username;
+        
+      /**
+      * @brief set if user id should be included in log
+      */
+      static bool user_id;
+
+      /**
+      * @brief set if user profile picture should be included in log
+      */
+      static bool user_profile;
+
+      /**
+      * @brief set if message should be included in log, recommended setting
+      */
+      static bool message;
+
+      /**
+      * @brief set if message timestamp should be included in log
+      */
+      static bool message_timestamp;
+
+      /**
+      * @brief fetch configuration needed
+      */
+      [[nodiscard]] ConfigResult<ConfigValue::config_types&> get_value(std::string name) const;
+
+      /**
+      * @brief validate configurations
+      * @note called in constructor by default
+      */
+      [[nodiscard]] void config_validate() const;
+
+    private:
+      /**
+      * @brief default configuration value
+      * @oops may be moved to implementation file
+      */
+      const ConfigValue::config_map default_config = {
+        {"Log-path", this->log_path},
+        {"Username", this->username},
+        {"User-ID", this->user_id},
+        {"User-profile", this->user_profile},
+        {"Message", this->message},
+        {"Message-Timestamp", this->message_timestamp}
+    };
+    /**
+    * @brief function for initilizing default values
+    * @oops might not be needed
+    */
+    [[nodiscard]] void initilize_default_config()const;
+  };
+};
 
 #endif
