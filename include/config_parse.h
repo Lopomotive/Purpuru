@@ -1,3 +1,4 @@
+#include <stdexcept>
 #define CONFIG_PARSE //DELETE
 #ifdef CONFIG_PARSE
 
@@ -50,39 +51,65 @@ class ConfigValue;
 class ConfigLoader;
 class ConfigClass;
 
+/** @note ConfigError might be moved to a seperate base class in the future */
+
 /**
 * @brief error handling class 
 * @note all values are parsed by ConfigResult, class should NOT get values on its own
 */
 template <typename T, typename E = std::monostate>
 class ConfigError{
-private:
+protected:
+  /**
+  * @brief error_type to hold possible error values
+  * @note first part of error id is error enum type
+  */
+  enum error_type{
+    GENERIC_ERROR = 1,
+    POINTER_ERROR = 2,
+    INVALID_INPUT = 3,
+    TEMPLATE_ERORR = 4
+  };
 
   /**
   * @brief struct for storing error values
   * @note values are assigned by constructor
   * @note struct may not be needed since copy constructor is probably better for ConfigError
+  * @note error_id is dependant on error_type_id
   */
   struct error_info{
-    uint8_t error_id; 
+    error_type error_type_id;
+    uint8_t error_id;
     T value;
-    std::string_view error;
+    std::string_view error_message;
   };
 
   error_info info_;
 
+  /** @brief variable to track last error id*/
+  static uint8_t last_error_id;
+
   /**
-  * @brief get function for recieving values and putting them in error_info struct
-  * @note function get() called by class constructor
+  * @brief determine error_type
   */
-  [[nodiscard]] void get() const;
+  [[nodiscard]] error_type determine_id() const;
+
+  /**
+  * @brief assign error id for error_info struct
+  */
+  [[nodiscard]] ConfigError& give_id() const;
+
+  /**
+  * @brief fetch error id from error_info struct
+  */
+  [[nodiscard]] error_info  get_id() const;
+
 
 public:
-
   /**
   * @note copy constructor may be better then constructor with parameter
   */ 
-  explicit ConfigError(T value, std::string error_message);
+  explicit ConfigError(T value, std::string_view error_message);
 
   /**
   * @brief copy constructor
@@ -99,23 +126,41 @@ public:
   * @brief copy assignment operator
   */
   ConfigError& operator=(ConfigError&) noexcept = default;
-  
+
   /**
   * @brief function to determine if error is solveable or not
   */
   [[nodiscard]] error_info error_crash() const;
   [[nodiscard]] error_info error_fix() const;
+
+  /**
+  * @brief termine if it is error_crash or error_fix looking at error_info
+  * @note return type might be changed
+  */
+  [[nodiscard]] error_info see_error() const;
+
+  /**
+  * @brief default constructor error
+  * @oops might be only included in implementation file
+  */
+  explicit ConfigError() {
+    throw std::runtime_error("Can not construct class without parameters");
+    /** @note EXIT_FAILURE might not be appropirate to throw */
+    exit(EXIT_FAILURE);
+  }
 };
 
 /**
 * @brief config result handler will catch value errors and parse to ConfigError
 * @note adhere to decl_val_t
+* @note other classes linked to ConfigResult may be added in the future
 */
 template <typename T> 
 class ConfigResult{
 private:
   /**
   * @brief value for the value given into the constructor and a type specifier if the user does not know
+  * @note decl_val_t might be removed in the future or changed to only decay_t<T>
   */
   T value;
   using decl_val_t = decltype(std::decay_t<T>());
@@ -205,7 +250,7 @@ public:
     template<typename T>
     [[nodiscard]] const T& as() const;
 
-private:
+protected:
     config_types value_;
 };
 
@@ -217,9 +262,6 @@ private:
 /** @note using tomllib C++ to parse .toml config file */
 
 class ConfigLoader{
-private:
-  /** @oops why this? */
-  file_t config_path_t;
 protected:
   /**
   * @brief function to load in configurations
@@ -227,6 +269,8 @@ protected:
   */
   [[nodiscard]] ConfigResult<ConfigValue> load_config() const;
 public:
+  file_t config_path_t;
+  
   /** 
   * @take in path and load configurations
   */
@@ -241,15 +285,14 @@ public:
   ConfigLoader& operator=(const ConfigLoader&) = delete;
   ConfigLoader(ConfigLoader&&) noexcept = default;
   ConfigLoader& operator=(ConfigLoader&&) noexcept = default;
-
 };
 
 /**
 * @brief class to store all configurations
 */
-class ConfigClass{
-  virtual ~ConfigClass() = default;
-
+class ConfigClass : public ConfigLoader{
+public:
+  virtual ~ConfigClass() = default;  
   class LoggingConfig{
     public:
       /**
@@ -287,11 +330,12 @@ class ConfigClass{
       */
       [[nodiscard]] ConfigResult<ConfigValue::config_types&> get_value(std::string name) const;
 
+      
       /**
       * @brief validate configurations
       * @note called in constructor by default
       */
-      [[nodiscard]] void config_validate() const;
+      void config_validate() const;
 
     private:
       /**
@@ -310,7 +354,7 @@ class ConfigClass{
     * @brief function for initilizing default values
     * @oops might not be needed
     */
-    [[nodiscard]] void initilize_default_config()const;
+    void initilize_default_config()const;
   };
 };
 
