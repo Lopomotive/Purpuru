@@ -9,7 +9,7 @@
 */
 #include <toml++/toml.hpp>
 
-#include "file_core.h"
+#include "common/file_core.h" //type convertion
 
 #include <any>
 #include <unordered_map>
@@ -68,7 +68,7 @@ protected:
     GENERIC_ERROR = 1,
     POINTER_ERROR = 2,
     INVALID_INPUT = 3,
-    TEMPLATE_ERORR = 4
+    TEMPLATE_ERROR = 4
   };
 
   /**
@@ -84,7 +84,7 @@ protected:
     std::string_view error_message;
   };
 
-  error_info info_;
+  mutable error_info info_;
 
   /** @brief variable to track last error id*/
   static uint8_t last_error_id;
@@ -97,12 +97,12 @@ protected:
   /**
   * @brief assign error id for error_info struct
   */
-  [[nodiscard]] ConfigError& give_id() const;
+  void give_id() const;
 
   /**
   * @brief fetch error id from error_info struct
   */
-  [[nodiscard]] error_info  get_id() const;
+  [[nodiscard]] uint8_t  get_id() const;
 
 
 public:
@@ -192,8 +192,8 @@ public:
     /**
      * @brief Type alias for supported configuration value types
      */
-    using config_types = std::variant<bool, std::string_view, file_t, folder_t,
-                                     const char*, std::string>;
+    using config_types = std::variant<bool*, file_t*,
+                                     folder_t*>;
     using config_map = std::unordered_map<std::string, config_types>;
     /**
      * @brief Default constructor
@@ -267,7 +267,14 @@ protected:
   * @brief function to load in configurations
   * @note should only be used within the constructor
   */
-  [[nodiscard]] ConfigResult<ConfigValue> load_config() const;
+  [[nodiscard]] virtual ConfigResult<ConfigValue> load_config() const;
+
+  /**
+  * @brief static variable definition of config_path_t defined in constructor
+  * @note maybe there is a better option?
+  */
+  static file_t static_config_path_t;
+  
 public:
   file_t config_path_t;
   
@@ -294,7 +301,10 @@ class ConfigClass : public ConfigLoader{
 public:
   virtual ~ConfigClass() = default;  
   class LoggingConfig{
+
     public:
+      /** @note remove static when this is changed */
+      
       /**
       * @brief specifies log path
       */
@@ -326,10 +336,16 @@ public:
       static bool message_timestamp;
 
       /**
+      * @brief load logging-specific configurations
+      * @note this overrides the base load_config
+      * @return ConfigResult containing the loaded config or an error
+      */
+      [[nodiscard]] ConfigResult<ConfigValue> load_config() const;
+
+      /**
       * @brief fetch configuration needed
       */
       [[nodiscard]] ConfigResult<ConfigValue::config_types&> get_value(std::string name) const;
-
       
       /**
       * @brief validate configurations
@@ -342,13 +358,13 @@ public:
       * @brief default configuration value
       * @oops may be moved to implementation file
       */
-      const ConfigValue::config_map default_config = {
-        {"Log-path", this->log_path},
-        {"Username", this->username},
-        {"User-ID", this->user_id},
-        {"User-profile", this->user_profile},
-        {"Message", this->message},
-        {"Message-Timestamp", this->message_timestamp}
+      const ConfigValue::config_map config_options = {
+        {"Log-path", &this->log_path},
+        {"Username", &this->username},
+        {"User-ID", &this->user_id},
+        {"User-profile", &this->user_profile},
+        {"Message", &this->message},
+        {"Message-Timestamp", &this->message_timestamp}
     };
     /**
     * @brief function for initilizing default values
