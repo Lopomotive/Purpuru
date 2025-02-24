@@ -59,35 +59,30 @@ ALPINE := $(shell grep -q "Alpine" /etc/os-release 2>/dev/null && echo "Alpine")
 
 #Variable for all compiler flags
 COMPILER_FLAGS := $(INTEGRATED_FLAGS) $(WARNING_FLAG) \
-	$(COMPILER_HARDENING) $(X86_64_HARDENING) 
-
-#Function to check if something is defined
-define is_defined
+	$(COMPILER_HARDENING) $(X86_64_HARDENING)
 	
-endef
-
-#Get wrapper font
-WRAPPER_FONT := 
- 
 #Info message wrapper
+# Test this out
 define info_wrapper
-	INFO_WRAPPER_FORMAT := $(shell echo \
-		" \033[1;34m]
-		<===================> 
-		
-	") \
-		
-	$(info $(INFO_WRAPPER_FORMAT)) 
+    @echo -e "\033[$(2)<===================>\n$(3): $(4)\n<===================>\033[0m"
 endef
 
 #Warning message wrapper
 define warning_wrapper
-
+	$(eval WARNING_MESSAGE := $(1))
+	$(call info_wrapper, "1;33", "Warning", $(WARNING_MESSSAGE))
 endef
 
 #Error message wrapper
 define error_wrapper
+	$(eval ERROR_MESSAGE := $(1))
+	$(call info_wrapper, "1;31", "Error", $(ERROR_MESSAGE))
+endef
 
+#Important note wrapper
+define important_note
+	$(eval IMPORTANT_MESSAGE := $(1))
+	$(call info_wrapper, "1;34", "Important", $(IMPORTANT_MESSAGE))
 endef
 
 define compiler_flags
