@@ -64,7 +64,7 @@ COMPILER_FLAGS := $(INTEGRATED_FLAGS) $(WARNING_FLAG) \
 #Info message wrapper
 # Test this out
 define info_wrapper
-    @echo -e "\033[$(2)<===================>\n$(3): $(4)\n<===================>\033[0m"
+    @echo -e "\033[$(1)<===================>\n$(2): $(3)\n<===================>\033[0m"
 endef
 
 #Warning message wrapper
