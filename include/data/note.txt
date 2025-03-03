@@ -1,0 +1,4 @@
+The choice between nosql and sql should be up to the user,
+nosql should be of first priority
+
+Server side databases will not be first priority and will be added later

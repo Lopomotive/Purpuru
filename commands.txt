@@ -1,0 +1,7 @@
+This file will be deleted later
+
+To see predefined macros:
+cc -O2 -dM -E - < /dev/null
+
+
+

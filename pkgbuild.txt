@@ -1,0 +1,1 @@
+Textfile for MAKEPKG usecase

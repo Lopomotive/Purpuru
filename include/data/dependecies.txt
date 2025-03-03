@@ -1,0 +1,2 @@
+Data collection uses the Crypto++ libary for hashing
+

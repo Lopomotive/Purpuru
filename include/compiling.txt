@@ -1,1 +1,0 @@
-g++ -o bot bot_dm.cpp -ldpp -std=c++17 -I$HOME/Code/Github/Pupuru/include -L/usr/include/dpp

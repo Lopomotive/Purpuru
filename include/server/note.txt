@@ -1,0 +1,2 @@
+This directory will include header files for establishing a connection with a client
+Openssl aswell as Crypto++ will be used to encrypt data between communication
