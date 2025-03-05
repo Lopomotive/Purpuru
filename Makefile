@@ -19,8 +19,9 @@ $(foreach tool,$(REQUIRED_TOOLS),\
 #=======================>
 
 #Include make config file
-include config.mk
- 
+
+include conf.mk
+
 CXX := g++
 CPP_SRC_EXT = cpp
 C_SRC_EXT = c
@@ -31,9 +32,9 @@ DEPS :=
 
 DEPS_INSTALL_SCRIPT = deps.sh
 
-BIN_NAME ?= Purpuru-bot
+BIN_NAME := Purpuru-bot
 
-#Versioning variables
+#Versioning variables, not currently implemented
 VERSION_MAJOR ?= 0
 VERSION_MINOR ?= 1
 VERSION_PATCH ?= 0
@@ -49,6 +50,7 @@ KERNEL := $(shell uname -r)
 
 DISCARD_MESSAGE := $(shell $@ > /dev/null 2>&1)
 
+#Cross platform needs testing, not currently working
 TARGET_ARCH ?= native
 CROSS_COMPILE ?=
 
@@ -98,17 +100,30 @@ endef
 #=======================>
 #GENERAL COMPILER
 #=======================>
+BUILD_DIR = build
 
 SRC_DIR = src
 INCLUDE_DIR = include
 
 CPP_SRCS := $(shell find $(SRC_DIR) -type f -name '*.cpp' -not -path '$(SRC_DIR)/SOURCE')
 C_SRCS := $(shell find $(SRC_DIR) -type f -name '*.c' -not -path '$(SRC_DIR)/SOURCE')
+
+$(info CPP_SRCS: $(CPP_SRCS))
+$(info C_SRCS: $(C_SRCS))
+	
 HDRS := $(shell find $(INCLUDE_DIR) -type f -name '*.h' -not -path '$(INCLUDE_DIR)/INCLUDE')
 
-OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(CPP_SRCS)) \
-        $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(C_SRCS))
-DEPS := $(OBJS:.o=.d)
+$(foreach src,$(CPP_SRCS) $(C_SRCS),\
+    $(if $(wildcard $(src)),,\
+        $(error Source file not found: $(src))\
+    )\
+)
+
+OBJS := $(patsubst $(SRC_DIR)/%.cpp, $(BUILD_DIR)/%.o, $(CPP_SRCS)) \
+        $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(C_SRCS))
+$(info OBJS: $(OBJS))
+
+#DEPS := $(OBJS:.o=.d)
 
 #=======================>
 #PATHS
@@ -120,7 +135,6 @@ ENV_BUILD_DIR := $(CUR_DIR)/build
 ENV_BINDIR := $(PREFIX)/bin
 ENV_LIBDIR := $(PREFIX)/lib
 
-BUILD_DIR = build
 BIN_DIR = bin
 TEST_DIR = tests
 
@@ -166,14 +180,19 @@ COMPILER_HARDENING := -Wall -O3 -Wformat -Wformat=2 \
 	-fstack-clash-protection -fstack-protector-strong \
 	-Wl,-z,nodlopen -Wl,-z,noexecstack -Wl,-z,relro \
 	-Wl,-z,now -Wl,--as-needed -Wl,--no-copy-dt-needed-entries \
-	-Wtrampolines -Werror=implicit -Werror=incompatiable-pointer-types \
-	-Werror=int-convertions
+	-Wtrampolines \
+
+#For more info
+MORE_INFO ?= false
+ifeq ($(MORE_INFO), true)
+	CXX_FLAGS += -v
+endif
 
 INIT_FLAG := -fno-delete-null-pointer-checks -fno-strict-overflow \
 	 -fno-strict-aliasing -ftrivial-auto-var-init=zero
 
-CXX_FLAGS += COMPILER_HARDENING
-CXX_FLAGS += INIT_FLAG
+CXX_FLAGS += $(COMPILER_HARDENING)
+CXX_FLAGS += $(INIT_FLAG)
 
 #Architecture specific hardening
 ifeq ($(UNAME), x86_64)
@@ -208,8 +227,9 @@ else
 endif
 
 #Timestamp when file has last been modified
+# This feature is currently not implemented
 FILE_TIMESTAMPS ?= true
-ifeq(FILE_TIMESTAMPS, true)
+ifeq	(FILE_TIMESTAMPS,true)	
 	LAST_MODIFIED_RAW := $(shell stat @$ | grep Modify)
 	LAST_MODIFIED := $(shell stat --format=%y @$ | sed 's/\..*//')
 
@@ -247,7 +267,7 @@ CURRENT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD>/dev/null | \
 #Version checking
 USE_VERSION ?= false
 
-ifeq ($(shell git describe > /dev/null 2>&1 ; echo $$?), 0)
+ifeq ($(shell git describe $(DISCARD_MESSAGE) ; echo $$?), 0)
 	USE_VERSION := true
 	VERSION := $(shell git describe --tags --long --dirty --always | \
 		sed 's/v\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\)-\?.*-\([0-9]*\)-\(.*\)/\1 \2 \3 \4 \5/g')
@@ -269,18 +289,8 @@ endif
 #=======================>
 #LOG
 #=======================>
-#Log currently not functioning
+#Log implementation currently not working
 
-LOG_DIR ?= $(CUR_DIR)/log
-ifneq(LOG_DIR, $(CUR_DIR)/log)
-	@echo "Making custom set directory: $(LOG_DIR)"
-	@mkdir -p $(LOG_DIR)
-endif
-
-define log
-
-	TIME_STAMP = $1
-endef
 #=======================>
 #TARGETS
 #=======================>
@@ -357,7 +367,7 @@ version:
 test: build
 	@echo "Preparing test environment..."
 	@mkdir -p $(TEST_DIR)
-	@$(CXX) $(CXX_FLAGS) $(DEBUG_FLAGS) $(OBJS) $(TEST_SRC) -o $(TEST_BIN)
+	@$(CXX) $(CXX_FLAGS) $(DEBUG_FLAGS) $(OBJS) $(TEST_SRC) $(TEST_BIN)
 	@echo "Running tests..."
 	@$(TEST_BIN)
 
