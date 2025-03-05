@@ -1,6 +1,20 @@
 ###MAKEFILE###
 
 #=======================>
+# VALIDATION
+#=======================>
+ifndef CXX
+    $(error Compiler (CXX) not defined)
+endif
+
+# CHANGE: Check for minimum required tools before proceeding
+REQUIRED_TOOLS := git make $(CXX)
+$(foreach tool,$(REQUIRED_TOOLS),\
+    $(if $(shell which $(tool)),,\
+        $(error Required tool '$(tool)' not found)\
+    )\
+)
+#=======================>
 # GENERAL
 #=======================>
 
@@ -11,11 +25,19 @@ CXX := g++
 CPP_SRC_EXT = cpp
 C_SRC_EXT = c
 
+#Project dependencies
+DEPS_DIR := deps
+DEPS :=
+
+DEPS_INSTALL_SCRIPT = deps.sh
+
 BIN_NAME ?= Purpuru-bot
 
-MAKEFILE =
-WITH_SUDO = sudo
-TOPLVL = ../..
+#Versioning variables
+VERSION_MAJOR ?= 0
+VERSION_MINOR ?= 1
+VERSION_PATCH ?= 0
+
 PWD = $(shell pwd)
 CUR_DIR := $(nodir $(PWD))
 SHELL = /bin/sh
@@ -27,15 +49,17 @@ KERNEL := $(shell uname -r)
 
 DISCARD_MESSAGE := $(shell $@ > /dev/null 2>&1)
 
-#If output of statistics should be the raw output or not
-RAW_OUTPUT ?= false
+TARGET_ARCH ?= native
+CROSS_COMPILE ?=
 
-#General function for outputting stats
-define VOMIT_STATS
+ifeq ($(TARGET_ARCH),native)
+    ARCH_FLAGS := -march=native
+else
+    CC := $(CROSS_COMPILE)gcc
+    CXX := $(CROSS_COMPILE)g++
+    ARCH_FLAGS := -march=$(TARGET_ARCH)
+endif
 
-endef
-
-#Yes or no
 define YES_OR_NO
 	@echo -n "$(1) [y/N] " && read ans && [ $${ans:-N} = y ] || \
 	 (echo "Action cancelled."; $(2))
@@ -75,23 +99,35 @@ endef
 #GENERAL COMPILER
 #=======================>
 
-#This might be changed
-CPP_SRCS := $(shell find ./src -type f -name '*.cpp' -not -path './src/SOURCE') 
-C_SRCS := $(shell find ./src -type f -name '*.c' -not -path './src/SOURCE')
-HDRS := $(shell find ./src -type f -name '*.h' -not -path './include/INCLUDE/*')
+SRC_DIR = src
+INCLUDE_DIR = include
 
-OBJS := $(CPP_SRCS:.cpp=.o) $(C_SRCS:.c=.o)
+CPP_SRCS := $(shell find $(SRC_DIR) -type f -name '*.cpp' -not -path '$(SRC_DIR)/SOURCE')
+C_SRCS := $(shell find $(SRC_DIR) -type f -name '*.c' -not -path '$(SRC_DIR)/SOURCE')
+HDRS := $(shell find $(INCLUDE_DIR) -type f -name '*.h' -not -path '$(INCLUDE_DIR)/INCLUDE')
+
+OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(CPP_SRCS)) \
+        $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(C_SRCS))
 DEPS := $(OBJS:.o=.d)
 
 #=======================>
 #PATHS
 #=======================>
 
+#Install envoirement
 INSTALL_PREFIX := /usr/local
-BUILD_DIR := $(CUR_DIR)/build
-BINDIR := $(PREFIX)/bin
-LIBDIR := $(PREFIX)/lib
-INCLUDEDIR := $(PREFIX)/include
+ENV_BUILD_DIR := $(CUR_DIR)/build
+ENV_BINDIR := $(PREFIX)/bin
+ENV_LIBDIR := $(PREFIX)/lib
+
+BUILD_DIR = build
+BIN_DIR = bin
+TEST_DIR = tests
+
+$(DEPS_DIR):
+	@mkdir -p $(DEPS_DIR)
+
+DOCS_DIR = docs
 
 #=======================>
 #FLAGS
@@ -102,13 +138,11 @@ CXX_FLAGS =
 STD_VERSION ?= 
 #C++26 not supported 
 STD_SUPPORTED := 17 20 23
+
 define CHECK_CXX_VERSION
     $(if $(shell $(CXX) -std=c++$(1) -E -x c++ /dev/null 2>/dev/null >/dev/null; echo $$?),\
         $(eval CXX_FLAGS += -std=c++$(1))\
-        $(eval break = true)\
-    else
-    	@echo "Versions under C++17 are not supported..."
-    	exit 1
+        $(eval FOUND_STD := true)\
     )
 endef
 
@@ -116,6 +150,13 @@ $(foreach ENTRY,$(STD_SUPPORTED),\
     $(call CHECK_CXX_VERSION,$(ENTRY))\
     $(if $(break),$(break))\
 )
+
+ifndef FOUND_STD
+    $(error No supported C++ standard found. Minimum C++17 required.)
+endif
+
+EXTRA_WARNINGS := -Wextra -Wpedantic -Wconversion \
+                  -Wshadow -Wfloat-equal -Wlogical-op
 
 COMPILER_HARDENING := -Wall -O3 -Wformat -Wformat=2 \
 	-Wconversion -Wimplicit-fallthrough -Werror=format-security \
@@ -131,62 +172,39 @@ COMPILER_HARDENING := -Wall -O3 -Wformat -Wformat=2 \
 INIT_FLAG := -fno-delete-null-pointer-checks -fno-strict-overflow \
 	 -fno-strict-aliasing -ftrivial-auto-var-init=zero
 
-X86_64_HARDENING := -fPIE -pie -fPIC -shared -fcf-protection=full
-X64_ARCH_HARDENING := -mbranch-protection=standard
+CXX_FLAGS += COMPILER_HARDENING
+CXX_FLAGS += INIT_FLAG
 
+#Architecture specific hardening
 ifeq ($(UNAME), x86_64)
-	CXX_FLAGS += $(X86_64_HARDENING) $(X64_ARCH_HARDENING) 
+    CXX_FLAGS += -fPIE -pie -fPIC -shared -fcf-protection=full -mbranch-protection=standard
 endif
 
-RECOMPILE_FLAGS ?= -g3 -ggdb
+DEBUG_FLAGS ?= -g3 -ggdb -DDEBUG
 
-THREAD_HARDENING := -fcf-protection=full
-ifeq (, $(wildcard /proc/sys/kernel/randomize_va_space))
-	CXX_FLAGAS += THREAD_HARDENING
-	@echo "Sucessfully added thread hardening: $$?"
-else
-	@echo "Thread hardnening not avaliable on system: $$?"
-endif
+#Check this out
+SANITIZERS := address undefined thread
+define add_sanitizer
+sanitize-$(1): CXX_FLAGS += -fsanitize=$(1) -fno-omit-frame-pointer
+sanitize-$(1): clean build
+endef
 
-#=======================>
-#SYMLINK
-#=======================>
-
-#Symlink might not be needed as its own directory
-CREATE_BIN_SYMLINK ?= true
-#Version symlink to link with different versions
-VERSION_SYMLINK ?= true
-
-SYMLINK_CMD := ln -s 
-
+$(foreach san,$(SANITIZERS),$(eval $(call add_sanitizer,$(san))))
 #=======================>
 #TIME
 #=======================>
 
 TIMESTAMP ?= true
 
-LOG_TIMESTAPM ?= true
-#Time functionality, check
-ifeq ($(LOG_TIMESTAMP),true)
-    TIME_FILE = $(dir $@).$(notdir $@)_time
-    TIMESTAMP_FORMAT = '%Y-%m-%d %H:%M:%S'
-    ELAPSED_FORMAT = '%H:%M:%S'
-    
-    CUR_TIME = date '+%s'
-    HUMAN_TIME = date '+$(TIMESTAMP_FORMAT)'
-    
-    START_TIME = echo "[$$(date '+$(TIMESTAMP_FORMAT)')] Starting $@..." ; \
-                 $(CUR_TIME) > $(TIME_FILE)
-    
-    END_TIME = st=$$(cat $(TIME_FILE)) ; \
-               $(RM) $(TIME_FILE) ; \
-               elapsed=$$(($$(date '+%s') - $$st)) ; \
-               formatted=$$(date -u -d @$$elapsed '+$(ELAPSED_FORMAT)' 2>/dev/null || date -u -r $$elapsed '+$(ELAPSED_FORMAT)') ; \
-               echo "[$$(date '+$(TIMESTAMP_FORMAT)')] Finished $@ (Time: $$formatted)"
-    
-    TIME_CMD = $(START_TIME) ; \
+ifeq ($(TIMESTAMP),true)
+    TIME_CMD = @echo "[$$(date '+%Y-%m-%d %H:%M:%S')] Starting $@..." ; \
+               start=$$(date +%s) ; \
                $(1) ; \
-               $(END_TIME)
+               end=$$(date +%s) ; \
+               elapsed=$$((end - start)) ; \
+               echo "[$$(date '+%Y-%m-%d %H:%M:%S')] Finished $@ (Time: $$elapsed seconds)"
+else
+    TIME_CMD = $(1)
 endif
 
 #Timestamp when file has last been modified
@@ -248,28 +266,10 @@ ifeq ($(shell git describe > /dev/null 2>&1 ; echo $$?), 0)
 		-D VERSION_HASH=\"$(VERSION_HASH)\"
 endif
 
-#Git updates to the latest version
-USE_LATEST_VERSION ?= true
-
-#CONTINUE HERE WITH THIS
-ifeq(USE_LATEST_VERSION, true)
-	TEMP_GIT_FOLDER := $(CUR_DIR)/"git_temp"
-	$(eval TMP := $(shell mktemp -d))
-	@mkdir -p TEMP_GIT_FOLDER
-	@echo "Checking git version"
-	git clone https://github.com/Lopomotive/Purpuru $(TEMP_GIT_FOLDER) $(DISCARD_MESSAGE)
-	@echo "Cloning..."
-	TEMP_GIT_VERSION := 
-	
-	@$(RM) -rf TEMP_GIT_FOLDER
-endif
-
-#Automatically update to the newest version
-AUTO_GIT ?= true
-
 #=======================>
 #LOG
 #=======================>
+#Log currently not functioning
 
 LOG_DIR ?= $(CUR_DIR)/log
 ifneq(LOG_DIR, $(CUR_DIR)/log)
@@ -282,80 +282,116 @@ define log
 	TIME_STAMP = $1
 endef
 #=======================>
-#INSTALL
+#TARGETS
 #=======================>
 
-.PHONY: release debug dirs install uinstall clean all isolate update
+.PHONY: all release debug build install uninstall clean test memcheck update isolate recompile installcheck dist distclean fetch-deps docs clean-docs version static-analysis
 
-#Standard, non-optimized release build
-release: dirs
-ifeq($(USE_VERSION), true)
-	@echo "Beginning to release build"
-else
-	@$(START_TIME)
-	@$(MAKE) all 
-endif
+all:build
 
-#Work on this debug
-debug: all
-	@echo "Debugging file... @$"
-	$(CXX_FLAGS) += RECOMPILE_FLAGS
-	
-	
+release: build
+
+debug: CXX_FLAGS += $(DEBUG_FLAGS)
+debug:build
+
 dirs:
-	@echo "Creating directories"
-	@mdkir -p $(dir $(OBJS))
-	@mdkir -p $(BINDIR)
+	@mkdir -p $(BIN_DIR)
+	@mkdir -p $(BUILD_DIR)
+	@mkdir -p $(TEST_DIR)
 
-install:
-	@echo "Installing bin to $(BINDIR)"
-	
+fetch-deps:
+	@echo "Fetching project dependencies..."
+	@git submodule update --init --recursive
+
+build: dirs $(BIN_DIR)/$(BIN_NAME)
+	$(call check_source)
+	$(call check_include)
+
+$(BIN_DIR)/$(BIN_NAME): $(OBJS)
+	@$(call TIME_CMD, $(CXX) $(CXX_FLAGS) -o $@ $^)
+
+# Compilation rules for source files
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.$(CPP_SRC_EXT)
+	@mkdir -p $(dir $@)
+	@$(call TIME_CMD, $(CXX) $(CXX_FLAGS) -MMD -MP -c -o $@ $<)
+
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.$(C_SRC_EXT)
+	@mkdir -p $(dir $@)
+	@$(call TIME_CMD, $(CXX) $(CXX_FLAGS) -MMD -MP -c -o $@ $<)
+
+install: build
+	@echo "Installing $(BIN_NAME) to $(INSTALL_PREFIX)/bin"
+	@install -d $(INSTALL_PREFIX)/bin
+	@install -m 755 $(BINDIR)/$(BIN_NAME) $(INSTALL_PREFIX)/bin/	
 
 uinstall:
-	@echo "Removing file from $(BINDIR)"
-	@$(RM) $(BINDIR)/$(BIN_NAME)
+	@echo "Removing $(BIN_NAME) from $(INSTALL_PREFIX)/bin"
+	@rm -f $(ENV_BINDIR)/$(BIN_NAME)
 
-	
 clean:
-	@echo "Cleaning..."
-	@echo "Deleting $(BIN_NAME) symlink"
-	@$(STAR_TIME)
-	@$(RM) $(BIN_NAME)
-	@echo "Deleting dir tree..."
-	$@(RM) -r build
-	$@(RM) -r bin
-	
-all: $(BINDIR)/$(BIN_NAME)
-	@echo "Creating symlink..."
-	@$(RM) $(BIN_NAME)
-	@$(START_TIME)
-	@$(CREATE_SYMLINK) $(BINDIR)/$(BIN_NAME) $(BIN_NAME)
-	
-	@echo -en "\t Make time:"
-	@$(END_TIME)
+	@echo "Cleaning build artifacts..."
+	@rm -rf $(BUILD_DIR)
+	@rm -rf $(BIN_DIR)
+	@rm -rf $(TEST_DIR)
 
-$(BINDIR)/$(BIN_NAME) : $(OBJS)
-	@echo "Linking current: $@"
-	@$(START_TIME)
-	$(CXX) $(CXX_FLAGS) $(OBJS) -o $@
-	@echo -en "\t Link time:"
-	@$(END_TIME)
+#Docs section
+docs:
+	DOXYGEN := $(shell command -v$ (DISCARD_MESSAGE))
+	ifeq($(DOXYGEN),)
+		@echo "Doxygen not installed"
+		$(call YES_OR_NO, "Do you want to install doxygen?")
+			$(./$(DEPS_INSTALL_SCRIPT)) 
+	endif
+	#Doxygen documentation code here
 
-#For isolating specified code files
-isolate:
+clean-docs:
+	@$(RM) -rf $(DOC_DIR)
 
-#For recompiling makefile, check if changes to dir have been made
-recompile:
+static-analysis:
+	@cppcheck $(SRC_DIR) --enable=all --inconclusive --std=c++$(FOUND_STD)
+	@clang-tidy $(CPP_SRCS) -- $(CXX_FLAGS)
 
-#Check install 
-installcheck:
+version:
+	@echo "Current project version: $(CURRENT_VERSION)"
 
-dist:
+test: build
+	@echo "Preparing test environment..."
+	@mkdir -p $(TEST_DIR)
+	@$(CXX) $(CXX_FLAGS) $(DEBUG_FLAGS) $(OBJS) $(TEST_SRC) -o $(TEST_BIN)
+	@echo "Running tests..."
+	@$(TEST_BIN)
 
-distclean:
+memcheck: test
+	@echo "Running memory check with Valgrind..."
+	@valgrind --leak-check=full \
+		--show-leak-kinds=all \
+		--track-origins=yes \
+		--verbose \
+		--log-file=$(LOG_DIR)/valgrind-report.txt \
+		$(TEST_BIN)
 
 update:
+ifeq ($(USE_LATEST_VERSION),true)
+	@echo "Checking for updates..."
+	@TEMP_DIR=$$(mktemp -d); \
+	git clone https://github.com/Lopomotive/Purpuru $$TEMP_DIR; \
+	if [ -n "$(VERSION_STRING)" ]; then \
+		REMOTE_VERSION=$$(cd $$TEMP_DIR && git describe --tags); \
+		if [ "$$REMOTE_VERSION" != "$(VERSION_STRING)" ]; then \
+			echo "Newer version found. Update mechanism to be implemented."; \
+		else \
+			echo "Already on the latest version."; \
+		fi; \
+	fi; \
+	rm -rf $$TEMP_DIR
+endif
+
+#Placeholder future makefile targets
+isolate:
+recompile:
+installcheck:
+dist:
+distclean:
 
 -include $(DEPS)
 
-$()
