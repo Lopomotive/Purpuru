@@ -3,6 +3,9 @@
 #=======================>
 # GENERAL
 #=======================>
+
+#Include make config file
+include config.mk
  
 CXX := g++
 CPP_SRC_EXT = cpp
@@ -10,7 +13,8 @@ C_SRC_EXT = c
 
 BIN_NAME ?= Purpuru-bot
 
-MAKEFILE = 
+MAKEFILE =
+WITH_SUDO = sudo
 TOPLVL = ../..
 PWD = $(shell pwd)
 CUR_DIR := $(nodir $(PWD))
@@ -31,6 +35,42 @@ define VOMIT_STATS
 
 endef
 
+#Yes or no
+define YES_OR_NO
+	@echo -n "$(1) [y/N] " && read ans && [ $${ans:-N} = y ] || \
+	 (echo "Action cancelled."; $(2))
+endef
+
+#Check source files *.cpp and *.c
+define check_source
+	@echo "Checking include arguments..."
+	$(if $(findstring -SOURCE=, $@),\
+	    $(eval SOURCE_FILE := $(patsubst -SOURCE=%, %, $@))\
+	    $(if $(wildcard $(SOURCE_FILE)),\
+	        $(eval FILE_LOCATION := $(shell readlink -r $(SOURCE_FILE)))\
+	        $(error "Source file not found: $(SOURCE_FILE) \n") \ 
+	    ,\
+	    	@echo "Source file found $(SOURCE_FILE) \n"  \
+	    )\
+	)
+	@echo "All file sources checked $@ $>"
+endef
+
+#Check include files *.h
+define check_include
+    @echo "Checking include arguments"
+    $(if $(findstring -INCLUDE=, $@),\
+        $(eval INCLUDE_FILE := $(patsubst -INCLUDE=%, %, $@))\
+        $(if $(wildcard $(INCLUDE_FILE)),\
+            $(eval FILE_LOCATION := $(shell readlink -r $(INCLUDE_FILE)))\
+            @echo "Header file found $(INCLUDE_FILE)"
+        ,\
+            $(error "Header file not found: $(INCLUDE_FILE)")
+        )\
+    )
+    @echo "All file sources checked $@ $>"
+endef
+	
 #=======================>
 #GENERAL COMPILER
 #=======================>
@@ -48,6 +88,7 @@ DEPS := $(OBJS:.o=.d)
 #=======================>
 
 INSTALL_PREFIX := /usr/local
+BUILD_DIR := $(CUR_DIR)/build
 BINDIR := $(PREFIX)/bin
 LIBDIR := $(PREFIX)/lib
 INCLUDEDIR := $(PREFIX)/include
@@ -113,6 +154,9 @@ endif
 
 #Symlink might not be needed as its own directory
 CREATE_BIN_SYMLINK ?= true
+#Version symlink to link with different versions
+VERSION_SYMLINK ?= true
+
 SYMLINK_CMD := ln -s 
 
 #=======================>
@@ -179,6 +223,9 @@ endif
 #GIT
 #=======================>
 
+CURRENT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD>/dev/null | \
+	echo "unknown branch")
+
 #Version checking
 USE_VERSION ?= false
 
@@ -216,6 +263,10 @@ ifeq(USE_LATEST_VERSION, true)
 	
 	@$(RM) -rf TEMP_GIT_FOLDER
 endif
+
+#Automatically update to the newest version
+AUTO_GIT ?= true
+
 #=======================>
 #LOG
 #=======================>
@@ -234,7 +285,7 @@ endef
 #INSTALL
 #=======================>
 
-.PHONY: release debug dirs install uinstall clean all isolate
+.PHONY: release debug dirs install uinstall clean all isolate update
 
 #Standard, non-optimized release build
 release: dirs
@@ -302,6 +353,8 @@ installcheck:
 dist:
 
 distclean:
+
+update:
 
 -include $(DEPS)
 
