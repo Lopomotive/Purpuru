@@ -1,2 +1,0 @@
-REMOVE THIS LATER
-Script folder containing shellscripts serving different purposes
