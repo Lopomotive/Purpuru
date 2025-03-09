@@ -1,13 +1,8 @@
 #!/bin/bash
-
 WITH_SUDO="sudo"
 #Force sudo use, implement later
 
 MASTER_DIR=$(realpath "../Purpuru")
-SCRIPT_FOLDER="${MASTER_DIR}/scripts"
-source "${SCRIPT_FOLDER}/time.sh" #Time
-source "${SCRIPT_FOLDER}/err.sh" #Error and exception handling
-source "${SCRIPT_FOLDER}/os.h"
 
 INSTALL_SOURCE_FILE="${BASH_SOURCE[0]}"
 echo "Running process ID: ${BASHPID}"
@@ -29,10 +24,90 @@ read_file() {
   fi
 }
 #----------------------
+# VARS
+# ---------------------
+#General variables
+declare -A COLORS
+COLORS["RED"]="\033[0;31m"
+COLORS["GREEN"]="\033[0;32m"
+COLORS["YELLOW"]="\033[0;33m"
+COLORS["BLUE"]="\033[0;34m"
+
+#If true allows suggestions if command missspelled, may not be needed
+export ALLOW_VERBOSE_TYPING="true"
+
+#----------------------
 # COMMAND
 # ---------------------
+#Command parsing
 
-COMMAND_VARS=
+#Help command print
+print_help(){
+  echo "Usage: $0 [OPTIONS] \n"
+  echo "Options:"
+  echo "  -p, --package PKG1 PKG2 ...PKGN  Specify packages to install
+    (arguments after -p are treated as packages)"
+  echo "  -m, --pm, --package-manager PKGM  Specify the preffered package manager \
+    to install packages from"
+  echo "  -l, --lib LIB1 LIB2 ...LIBN  Specify the libaries to install \
+    (arguments after -l are treated as libaries)" 
+}
+
+while [[ $# -gt 0]]; do
+  case $1 in
+    #Specify what packages should only be installed
+    #Ignores all other packages
+    -p | --package)
+      shift
+      while [[ $# -gt 0 && ! "$1" == -* ]]; do
+        PACKAGES="$1"
+        shift
+      done
+      echo "Only installing ${PACKAGES}"
+    ;;
+    #Specify package manager to be used
+    -m | --pm | --package-manager)
+      if [[ "$1" == -*]]; then
+        PREFFERED_PACKAGE_MANAGER="$1"
+        shift
+        shift
+      fi
+      echo "Using preffered package manager \
+        ${PREFFERED_PACKAGED_MANAGER}"
+    ;;
+    #Specify what libaries should only be installed
+    #Ignores all other libaries
+    -l | --lib)
+      shift
+      while [[ $# -gt 0 && ! "$1" == -* ]]; do
+        LIBS="$1"
+        shift
+      done
+    echo "Only installing ${LIBS}"
+    ;;
+
+    -v | --verbose)
+      VERBOSE=true
+      shift
+    ;;
+    -h | --help)
+      print_help()
+    ;;
+
+    *)
+      echo "Uknown option: $1"
+      exit 1
+    ;;
+  esac
+  exit_code=$?
+
+  if [ $exit_code -eq 0]; then
+    break
+  else
+    echo "Error parsing value: $@"
+  fi
+done
+
 
 #----------------------
 # TIME
@@ -45,6 +120,9 @@ COMMAND_VARS=
 #----------------------
 # PACKAGES
 # ---------------------
+#NOTE:Packages sections will be re-newed and updated at a later state
+# once all or most dependencies are known
+
 
 # Loop through the list of package managers to find the one in use
 for entry in $PACKAGE_MANAGER; do
@@ -199,11 +277,6 @@ install_package_pm(){
   fi
 }
 
-#Check if package has a valid entry for git translation
-for package_entry in "${GIT_TRANSLATION}"; do
-  #Logic here
-done
-
 #Git translation currently empty
 install_package_git(){
   local PKG="$1"
@@ -211,15 +284,35 @@ install_package_git(){
 
   #For loop might be implemented instead of case
   case "${GIT_TRANSLATION}" in
-    
+    Example)
+
+    ;;
   esac
 }
 
 #----------------------
 # LIB
 # ---------------------
-
 #Project dependent libaries
+LIB_DIR="${MASTER_DIR}/lib"
+echo "${LIB_DIR}"
+
+#Implementation to check if libary is not in system or user lib directory
+# like lib64, lib32 etc
+
+TRY_TO_INSTALL_THROUGH_PACKAGE="true"
+
+#DPP
+if [ "${TRY_TO_INSTALL_THROUGH_PACKAGE}" -eq "true"]; then
+  case ${USED_PACKAGE_MANAGER} in
+    yay)
+      yay -Sy dpp
+    
+  esac
+  if [$? -eq 1]; then
+    echo ""
+  fi
+fi
 
 #----------------------
 # TEMPLATE
