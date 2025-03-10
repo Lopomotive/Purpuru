@@ -1,6 +1,14 @@
 #!/bin/bash
+#Install file will be continued when rest of the project is more complete
 WITH_SUDO="sudo"
-#Force sudo use, implement later
+
+#Force sudo use
+if [[ $EUID -ne 0 ]]; then
+  echo "This script must be run as root. Please use 'sudo' to execute it."
+  exit 1
+fi
+
+echo "Running installation"
 
 MASTER_DIR=$(realpath "../Purpuru")
 
@@ -33,13 +41,17 @@ COLORS["GREEN"]="\033[0;32m"
 COLORS["YELLOW"]="\033[0;33m"
 COLORS["BLUE"]="\033[0;34m"
 
+USR_DIR=$(nodir "/usr")
+MOUNT_DIR=$(nodir "/")
+
+SYSTEM_REPOS="${USR_DIR} ${MOUNT_DIR}"
+
 #If true allows suggestions if command missspelled, may not be needed
 export ALLOW_VERBOSE_TYPING="true"
 
 #----------------------
-# COMMAND
+# COMMANDS/FLAGS
 # ---------------------
-#Command parsing
 
 #Help command print
 print_help(){
@@ -50,10 +62,12 @@ print_help(){
   echo "  -m, --pm, --package-manager PKGM  Specify the preffered package manager \
     to install packages from"
   echo "  -l, --lib LIB1 LIB2 ...LIBN  Specify the libaries to install \
-    (arguments after -l are treated as libaries)" 
+    (arguments after -l are treated as libaries)"
+  echo "  -v, --verbose  Enable verbose output"
+  echo "  -h, --help  Shows current help message"
 }
 
-while [[ $# -gt 0]]; do
+while [[ $# -gt 0 ]]; do
   case $1 in
     #Specify what packages should only be installed
     #Ignores all other packages
@@ -67,7 +81,7 @@ while [[ $# -gt 0]]; do
     ;;
     #Specify package manager to be used
     -m | --pm | --package-manager)
-      if [[ "$1" == -*]]; then
+      if [[ "$1" == -* ]]; then
         PREFFERED_PACKAGE_MANAGER="$1"
         shift
         shift
@@ -91,7 +105,8 @@ while [[ $# -gt 0]]; do
       shift
     ;;
     -h | --help)
-      print_help()
+      print_help
+    shift
     ;;
 
     *)
@@ -101,7 +116,7 @@ while [[ $# -gt 0]]; do
   esac
   exit_code=$?
 
-  if [ $exit_code -eq 0]; then
+  if [ $exit_code -eq 0 ]; then
     break
   else
     echo "Error parsing value: $@"
@@ -112,10 +127,29 @@ done
 #----------------------
 # TIME
 # ---------------------
+#Time specific section
 
-#----------------------
-# PROCESS
-# ---------------------
+format_time() {
+  local time_seconds=$1
+  local hours minutes seconds
+
+  hours=$(echo "$time_seconds / 3600" | bc)
+  time_seconds=$(echo "$time_seconds % 3600" | bc)
+  minutes=$(echo "$time_seconds / 60" | bc)
+  seconds=$(echo "$time_seconds % 60" | bc)
+
+  printf "Time taken: %02d:%02d:%06.3f\n" "$hours" "$minutes" "$seconds"
+}
+
+#Usage
+#echo "Running Task 1..."
+#TASK1_START_TIME=$(date +%s.%N)
+
+#PROCESS
+
+#TASK1_END_TIME=$(date +%s.%N)
+#TASK1_TIME_TAKEN=$(echo "$TASK1_END_TIME - $TASK1_START_TIME" | bc)
+#echo "Task 1 completed in: $(format_time "$TASK1_TIME_TAKEN")"
 
 #----------------------
 # PACKAGES
@@ -124,7 +158,6 @@ done
 # once all or most dependencies are known
 
 
-# Loop through the list of package managers to find the one in use
 for entry in $PACKAGE_MANAGER; do
   if command -v "$entry" >/dev/null 2>&1; then
     USED_PACKAGE_MANAGER=("$entry")
@@ -146,7 +179,7 @@ GIT_TRANSLATION["Example"]="Example.git"
 package_is_valid(){
   local PKG="$1"
   for package_entry in "${PKG}"; do
-    if [ "${PKG}" == "${package_entry}"]; then
+    if [ "${PKG}" == "${package_entry}" ]; then
       continue
     else
       echo "Invalid package found"
@@ -174,15 +207,15 @@ npm \
 "
 
 #Install package through package manager
-install_package_pm(){
+install_package_pm() {
   PKG_ERROR=$("echo Package not found $@ with package manager $^" && return 1)
   local PKG="$1"
-  package_is_valid() "${PKG}"
+  package_is_valid "${PKG}"
   PACKAGE_IS_INSTALLED=$(echo "Package: ${PKG} is already installed \
    by ${USED_PACKAGE_MANAGER}")
    
   #Default way to check if package is installed
-  if [command -v "${PKG}" &>/dev/null];then
+  if [command -v "${PKG}" &>/dev/null ]; then
     "${PACKAGE_IS_INSTALLED}"
   else
     break
@@ -285,7 +318,7 @@ install_package_git(){
   #For loop might be implemented instead of case
   case "${GIT_TRANSLATION}" in
     Example)
-
+      
     ;;
   esac
 }
@@ -299,6 +332,17 @@ echo "${LIB_DIR}"
 
 #Implementation to check if libary is not in system or user lib directory
 # like lib64, lib32 etc
+export VALID_LIB_DIR
+for LIB_ENTRY in "${SYSTEM_REPOS[@]}"; do
+  if [ -d "${LIB_ENTRY}"];then
+    for SUBDIR in "${DIR}/*";do
+      if [[ "${SUBDIR}" == *lib*]]; then
+          VALID_LIB_DIR="${SUBDIR}"
+      fi
+    done
+  fi
+done
+echo "${VALID_LIB_DIR}"
 
 TRY_TO_INSTALL_THROUGH_PACKAGE="true"
 
